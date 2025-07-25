@@ -7,6 +7,7 @@ st.set_page_config(page_title="Dashboard Helpdesk ERP SAG", layout="wide")
 import pandas as pd
 import xmlrpc.client
 import time
+
 from streamlit_autorefresh import st_autorefresh
 
 # Atualização automática a cada 30 segundos (para tickets)
