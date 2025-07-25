@@ -10,8 +10,8 @@ import time
 
 from streamlit_autorefresh import st_autorefresh
 
-# Atualização automática a cada 30 segundos (para tickets)
-st_autorefresh(interval=30 * 1000, key="refresh_dashboard", limit=None)
+# Atualização automática a cada 60 segundos (para tickets)
+st_autorefresh(interval=60 * 1000, key="refresh_dashboard", limit=None)
 
 st.markdown("""
     <style>
