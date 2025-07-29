@@ -1,0 +1,9 @@
+[theme]
+base = "dark"
+
+[server]
+runOnSave = true
+headless = true
+
+[client]
+toolbarMode = "minimal"
