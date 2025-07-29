@@ -16,10 +16,13 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 def carregar_cache_local():
-    if not os.path.exists("dados_cache.pkl"):
+    # Caminho absoluto para a mesma pasta do script
+    cache_path = os.path.join(os.path.dirname(__file__), "dados_cache.pkl")
+    
+    if not os.path.exists(cache_path):
         st.error("⚠️ Cache ainda não foi gerado. Aguarde ou rode o atualizador.")
         st.stop()
-    with open("dados_cache.pkl", "rb") as f:
+    with open(cache_path, "rb") as f:
         dados = pickle.load(f)
     df_abertos = pd.DataFrame(dados['tickets_abertos'])
     df_fechados = pd.DataFrame(dados['tickets_fechados_mes'])

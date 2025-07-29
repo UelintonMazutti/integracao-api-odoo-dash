@@ -2,8 +2,7 @@ import pandas as pd
 import xmlrpc.client
 import pickle
 from datetime import datetime
-import time
-import subprocess
+import os
 
 def carregar_dados_completos():
     url = "https://suporte.sag.com.br"
@@ -92,22 +91,13 @@ def carregar_dados_completos():
         "imagens": imagens
     }
 
-    with open("dados_cache.pkl", "wb") as f:
+    # Salva o cache na mesma pasta deste script
+    diretorio_atual = os.path.dirname(os.path.abspath(__file__))
+    caminho_arquivo = os.path.join(diretorio_atual, "dados_cache.pkl")
+    with open(caminho_arquivo, "wb") as f:
         pickle.dump(dados, f)
 
     print("✅ Cache salvo com sucesso.")
 
 if __name__ == "__main__":
     carregar_dados_completos()
-
-while True:
-    now = datetime.now()
-    hora = now.hour
-    dia_semana = now.weekday()  # 0=segunda, 6=domingo
-
-    if dia_semana < 5 and 8 <= hora < 18:
-        print(f"Atualizando cache... {now.strftime('%Y-%m-%d %H:%M:%S')}")
-        subprocess.run(["python", "atualizador.py"])
-    else:
-        print(f"Fora do horário de atualização ({now.strftime('%Y-%m-%d %H:%M:%S')}). Dormindo até a próxima verificação.")
-    time.sleep(30)
