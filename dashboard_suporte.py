@@ -6,6 +6,8 @@ st.set_page_config(page_title="Dashboard Helpdesk ERP SAG", layout="wide")
 import pandas as pd
 import xmlrpc.client
 import time
+import os
+import base64
 from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
 
@@ -17,19 +19,6 @@ st.markdown("""
         h1 {font-size: 2.3rem !important;}
     </style>
 """, unsafe_allow_html=True)
-
-def carregar_fotos(_models, _db, _uid, _password, user_ids):
-    imagens = {}
-    for user_id in user_ids:
-        try:
-            dados_user = _models.execute_kw(
-                _db, _uid, _password, 'res.users', 'read',
-                [[int(user_id)]], {'fields': ['image_1920']}
-            )
-            imagens[user_id] = dados_user[0].get('image_1920')
-        except:
-            imagens[user_id] = None
-    return imagens
 
 def carregar_dados():
     url = "https://suporte.sag.com.br"
@@ -122,14 +111,25 @@ def extrair_primeiro_e_segundo_nome(nome):
     partes = nome.split()
     return " ".join(partes[:2]) if len(partes) >= 2 else nome
 
-def mostrar_fotos_agentes(df, df_fechados_mes, models, db, uid, password):
+def mostrar_fotos_agentes(df, df_fechados_mes, *_):
     df['agente'] = df['agente'].apply(extrair_primeiro_e_segundo_nome)
     df_grouped = df.groupby(['agente', 'user_id_num'])
     grupos_ordenados = sorted(df_grouped, key=lambda x: len(x[1]), reverse=True)
-    
+
+    def carregar_imagens_local(user_ids):
+        imagens = {}
+        for user_id in user_ids:
+            caminho = os.path.join("assets", "fotos_agentes", f"{user_id}.png")
+            if os.path.isfile(caminho):
+                with open(caminho, "rb") as f:
+                    imagens[user_id] = base64.b64encode(f.read()).decode("utf-8")
+            else:
+                imagens[user_id] = None
+        return imagens
+
     user_ids = [id_user for (_, id_user), _ in grupos_ordenados if id_user is not None]
     if "imagens_cache" not in st.session_state:
-        st.session_state.imagens_cache = carregar_fotos(models, db, uid, password, user_ids)
+        st.session_state.imagens_cache = carregar_imagens_local(user_ids)
     imagens_cache = st.session_state.imagens_cache
 
     n_colunas = 5
