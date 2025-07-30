@@ -144,9 +144,12 @@ def extrair_primeiro_e_segundo_nome(nome):
     return " ".join(partes[:2]) if len(partes) >= 2 else nome
 
 def mostrar_fotos_agentes(df, df_fechados_mes, *_):
-    # Usar um placeholder para evitar piscar
+    import streamlit as st
+    import os
+    import base64
+
     placeholder = st.empty()
-    
+
     with placeholder.container():
         df['agente'] = df['agente'].apply(extrair_primeiro_e_segundo_nome)
         df_grouped = df.groupby(['agente', 'user_id_num'])
@@ -154,11 +157,10 @@ def mostrar_fotos_agentes(df, df_fechados_mes, *_):
 
         def carregar_imagens_local(user_ids):
             imagens = {}
-            base_dir = os.path.dirname(os.path.abspath(__file__))  # <- sempre caminho absoluto
+            base_dir = os.path.dirname(os.path.abspath(__file__))
             for user_id in user_ids:
                 nome_arquivo = f"{int(float(user_id))}.png"
                 caminho = os.path.join(base_dir, "assets", "fotos_agentes", nome_arquivo)
-                print(f"Tentando carregar: {caminho}")
                 if os.path.isfile(caminho):
                     with open(caminho, "rb") as f:
                         imagens[user_id] = base64.b64encode(f.read()).decode("utf-8")
@@ -170,6 +172,10 @@ def mostrar_fotos_agentes(df, df_fechados_mes, *_):
         if "imagens_cache" not in st.session_state:
             st.session_state.imagens_cache = carregar_imagens_local(user_ids)
         imagens_cache = st.session_state.imagens_cache
+
+        # Histórico anterior de fechados
+        if "fechados_anteriores" not in st.session_state:
+            st.session_state.fechados_anteriores = {}
 
         n_colunas = 5
         card_style = """
@@ -197,8 +203,6 @@ def mostrar_fotos_agentes(df, df_fechados_mes, *_):
 
         prioridade_emojis = {'Urgente': '🚨', 'Alta': '🔴', 'Média': '🟡', 'Baixa': '🔵'}
         ordem = ['Urgente', 'Alta', 'Média', 'Baixa']
-
-        # Defina as medalhas
         medalhas = ['🥇', '🥈', '🥉']
 
         df_sem = df[df['user_id_num'].isnull()]
@@ -223,8 +227,19 @@ def mostrar_fotos_agentes(df, df_fechados_mes, *_):
         for i, ((agente, id_user), df_agente) in enumerate(grupos_ordenados):
             if id_user is None:
                 continue
+
             total_abertos = len(df_agente)
             total_fechados = len(df_fechados_mes[df_fechados_mes['user_id_num'] == id_user])
+            fechados_anterior = st.session_state.fechados_anteriores.get(id_user, 0)
+
+            if total_fechados > fechados_anterior:
+                tendencia_icone = " 🔼 "
+            elif total_fechados < fechados_anterior:
+                tendencia_icone = " 🔽 "
+            else:
+                tendencia_icone = ""
+
+            st.session_state.fechados_anteriores[id_user] = total_fechados
 
             idx_offset = 1 if not df_sem.empty else 0
             col_idx = (i + idx_offset) % n_colunas
@@ -237,15 +252,13 @@ def mostrar_fotos_agentes(df, df_fechados_mes, *_):
                 img_html = f'<img src="data:image/png;base64,{img_base64}" style="{img_style}">' if img_base64 else f'<img src="https://via.placeholder.com/85?text=Foto" style="{img_style}">'
                 prioridades = df_agente['prioridade'].value_counts().to_dict()
                 prioridade_html = ' '.join(f"{prioridade_emojis[p]} {prioridades[p]}" for p in ordem if p in prioridades)
-
-                # Seleciona a medalha conforme o índice
                 medalha = medalhas[i] if i < 3 else ''
 
                 st.markdown(f"""
                     <div style="{card_style}">
                         {img_html}
                         <div style="font-weight:600;font-size:1.01em;margin-bottom:1px;">{medalha} {agente}</div>
-                        <div style="font-size:0.93em;margin-bottom:3px;">🎟️ <b>{total_abertos}</b> abertos / ✅ <b>{total_fechados}</b> fechados</div>
+                        <div style="font-size:0.93em;margin-bottom:3px;">🎟️ <b>{total_abertos}</b> abertos / ✅ <b>{total_fechados}</b> fechados{tendencia_icone}</div>
                         <hr style="border:0;border-top:1.1px dashed #bbb;margin:7px 0 7px 0;width:90%;">
                         <div style="font-size:0.99em;">{prioridade_html}</div>
                     </div>
