@@ -257,8 +257,8 @@ def mostrar_fotos_agentes(df, df_fechados_mes, *_):
                 st.markdown(f"""
                     <div style="{card_style}">
                         {img_html}
-                        <div style="font-weight:600;font-size:1.01em;margin-bottom:1px;">{medalha} {agente}</div>
-                        <div style="font-size:0.93em;margin-bottom:3px;">🎟️ <b>{total_abertos}</b> abertos / ✅ <b>{total_fechados}</b> fechados{tendencia_icone}</div>
+                        <div style="font-weight:600;font-size:1.01em;margin-bottom:1px;">{medalha} {agente} {tendencia_icone}</div>
+                        <div style="font-size:0.93em;margin-bottom:3px;">🎟️ <b>{total_abertos}</b> abertos / ✅ <b>{total_fechados}</b> fechados</div>
                         <hr style="border:0;border-top:1.1px dashed #bbb;margin:7px 0 7px 0;width:90%;">
                         <div style="font-size:0.99em;">{prioridade_html}</div>
                     </div>
