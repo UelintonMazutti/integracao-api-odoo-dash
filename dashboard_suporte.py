@@ -9,9 +9,10 @@ import time
 import os
 import base64
 from datetime import datetime
+import platform
 from streamlit_autorefresh import st_autorefresh
 
-st_autorefresh(interval=10 * 1000, key="refresh_dashboard", limit=None)
+st_autorefresh(interval=30 * 1000, key="refresh_dashboard", limit=None)
 
 st.markdown("""
     <style>
@@ -153,8 +154,11 @@ def mostrar_fotos_agentes(df, df_fechados_mes, *_):
 
         def carregar_imagens_local(user_ids):
             imagens = {}
+            base_dir = os.path.dirname(os.path.abspath(__file__))  # <- sempre caminho absoluto
             for user_id in user_ids:
-                caminho = os.path.join("assets", "fotos_agentes", f"{user_id}.png")
+                nome_arquivo = f"{int(float(user_id))}.png"
+                caminho = os.path.join(base_dir, "assets", "fotos_agentes", nome_arquivo)
+                print(f"Tentando carregar: {caminho}")
                 if os.path.isfile(caminho):
                     with open(caminho, "rb") as f:
                         imagens[user_id] = base64.b64encode(f.read()).decode("utf-8")
@@ -194,6 +198,9 @@ def mostrar_fotos_agentes(df, df_fechados_mes, *_):
         prioridade_emojis = {'Urgente': '🚨', 'Alta': '🔴', 'Média': '🟡', 'Baixa': '🔵'}
         ordem = ['Urgente', 'Alta', 'Média', 'Baixa']
 
+        # Defina as medalhas
+        medalhas = ['🥇', '🥈', '🥉']
+
         df_sem = df[df['user_id_num'].isnull()]
         total_fechados_sem = len(df_fechados_mes[df_fechados_mes['user_id_num'].isnull()])
         if not df_sem.empty:
@@ -231,24 +238,60 @@ def mostrar_fotos_agentes(df, df_fechados_mes, *_):
                 prioridades = df_agente['prioridade'].value_counts().to_dict()
                 prioridade_html = ' '.join(f"{prioridade_emojis[p]} {prioridades[p]}" for p in ordem if p in prioridades)
 
+                # Seleciona a medalha conforme o índice
+                medalha = medalhas[i] if i < 3 else ''
+
                 st.markdown(f"""
                     <div style="{card_style}">
                         {img_html}
-                        <div style="font-weight:600;font-size:1.01em;margin-bottom:1px;">{agente}</div>
+                        <div style="font-weight:600;font-size:1.01em;margin-bottom:1px;">{medalha} {agente}</div>
                         <div style="font-size:0.93em;margin-bottom:3px;">🎟️ <b>{total_abertos}</b> abertos / ✅ <b>{total_fechados}</b> fechados</div>
                         <hr style="border:0;border-top:1.1px dashed #bbb;margin:7px 0 7px 0;width:90%;">
                         <div style="font-size:0.99em;">{prioridade_html}</div>
                     </div>
                 """, unsafe_allow_html=True)
 
+def tocar_audio(audio_file):
+    if platform.system() == "Windows":
+        comando = f'powershell -c (New-Object Media.SoundPlayer "{audio_file}").PlaySync();'
+        os.system(comando)
+    elif platform.system() == "Darwin":
+        os.system(f'afplay "{audio_file}"')
+    else:
+        os.system(f'xdg-open "{audio_file}"')
+
 def exibir_dashboard(df, df_fechados_mes, models, db, uid, password):
     total_abertos = len(df)
     total_fechados = len(df_fechados_mes)
+
+    audio_file_feliz = os.path.join(os.path.dirname(os.path.abspath(__file__)), "feliz.wav")
+    audio_file_triste = os.path.join(os.path.dirname(os.path.abspath(__file__)), "triste.wav")
+
+    total_fechados_anterior = st.session_state.get("total_fechados_anterior", 0)
+
     st.title(f"📺 Dashboard - Equipe Suporte | 🎟️ Abertos: {total_abertos} | ✅ Fechados no mês: {total_fechados}")
     st.markdown("Todos os tickets do ***Suporte***, exceto os ***Cancelados***, ***Encerrados***, ***Notificados*** ou ***Faturados***.")
+
     mostrar_fotos_agentes(df, df_fechados_mes, models, db, uid, password)
 
-# Execução principal
+    print(f'Antes do IF, Tickets Fechados: {total_fechados} | {total_fechados_anterior}')
+    
+    if total_fechados > total_fechados_anterior:
+        st.session_state["total_fechados_anterior"] = total_fechados  # Atualiza aqui
+        st.balloons()
+        st.balloons()
+        st.balloons()
+        tocar_audio(audio_file_feliz)
+        print(f'Depois do IF de Maior, Tickets Fechados: {total_fechados} | {total_fechados_anterior}')
+
+    elif total_fechados < total_fechados_anterior:
+        st.session_state["total_fechados_anterior"] = total_fechados  # Atualiza aqui
+        st.snow()
+        st.snow()
+        st.snow()
+        tocar_audio(audio_file_triste)
+        print(f'Depois do IF de Menor, Tickets Fechados: {total_fechados} | {total_fechados_anterior}')
+
 try:
     # Usar um placeholder para o conteúdo principal
     main_placeholder = st.empty()
