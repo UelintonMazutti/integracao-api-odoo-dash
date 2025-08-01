@@ -306,7 +306,7 @@ if dentro_do_horario():
 
                 with col:
                     img_base64 = imagens_cache.get(id_user)
-                    img_html = f'<img src="data:image/png;base64,{img_base64}" style="{img_style}">' if img_base64 else f'<img src="https://via.placeholder.com/85?text=Foto" style="{img_style}">'
+                    img_html = f'<img src="data:image/png;base64,{img_base64}" style="{img_style}">' if img_base64 else f'<img src="https://i.ibb.co/wrskMjQK/FotoGalo.png" style="{img_style}">'
                     prioridades = df_agente['prioridade'].value_counts().to_dict()
                     prioridade_html = ' '.join(f"{prioridade_emojis[p]} {prioridades[p]}" for p in ordem if p in prioridades)
                     medalha = medalhas[i] if i < 3 else ''
