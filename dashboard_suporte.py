@@ -173,9 +173,11 @@ def mostrar_fotos_agentes(df, df_fechados_mes, *_):
             st.session_state.imagens_cache = carregar_imagens_local(user_ids)
         imagens_cache = st.session_state.imagens_cache
 
-        # Histórico anterior de fechados
         if "fechados_anteriores" not in st.session_state:
             st.session_state.fechados_anteriores = {}
+
+        if "tendencia_icone_estado" not in st.session_state:
+            st.session_state.tendencia_icone_estado = {}
 
         n_colunas = 5
         card_style = """
@@ -201,12 +203,11 @@ def mostrar_fotos_agentes(df, df_fechados_mes, *_):
             margin-bottom: 6px;
         """
 
-        prioridade_emojis = {'Urgente': '🚨', 'Alta': '🔴', 'Média': '🟡', 'Baixa': '🔵'}
-        ordem = ['Urgente', 'Alta', 'Média', 'Baixa']
+        prioridade_emojis = {'Urgente': '🚨', 'Alta': '🔴', 'Média': '🟡', 'Baixa': '🔵', 'False': '⚪', 'Não definida': '⚪'}
+        ordem = ['Urgente', 'Alta', 'Média', 'Baixa', 'False', 'Não definida']
         medalhas = ['🥇', '🥈', '🥉']
 
         df_sem = df[df['user_id_num'].isnull()]
-        total_fechados_sem = len(df_fechados_mes[df_fechados_mes['user_id_num'].isnull()])
         if not df_sem.empty:
             cols = st.columns(n_colunas, gap="small")
             col = cols[0]
@@ -218,7 +219,7 @@ def mostrar_fotos_agentes(df, df_fechados_mes, *_):
                     <div style="{card_style}">
                         {img_html}
                         <div style="font-weight:600;font-size:1.01em;margin-bottom:1px;">Sem Atribuição</div>
-                        <div style="font-size:0.93em;margin-bottom:3px;">🎟️ <b>{len(df_sem)}</b> abertos / ✅ <b>{total_fechados_sem}</b> fechados</div>
+                        <div style="font-size:0.93em;margin-bottom:3px;">🎟️ <b>{len(df_sem)}</b> abertos / ✅ <b>0</b> fechados</div>
                         <hr style="border:0;border-top:1.1px dashed #bbb;margin:7px 0 7px 0;width:90%;">
                         <div style="font-size:0.99em;">{prioridade_html}</div>
                     </div>
@@ -229,17 +230,28 @@ def mostrar_fotos_agentes(df, df_fechados_mes, *_):
                 continue
 
             total_abertos = len(df_agente)
-            total_fechados = len(df_fechados_mes[df_fechados_mes['user_id_num'] == id_user])
-            fechados_anterior = st.session_state.fechados_anteriores.get(id_user, 0)
+            total_fechados = 0 if df_fechados_mes.empty else len(df_fechados_mes[df_fechados_mes['user_id_num'] == id_user])
 
-            if total_fechados > fechados_anterior:
-                tendencia_icone = " 🔼 "
-            elif total_fechados < fechados_anterior:
-                tendencia_icone = " 🔽 "
+            fechados_anterior = st.session_state.fechados_anteriores.get(id_user, None)
+
+            if fechados_anterior is not None:
+                if total_fechados > fechados_anterior:
+                    st.session_state.tendencia_icone_estado[id_user] = {"icone": " 🔼 ", "contador": 3}
+                elif total_fechados < fechados_anterior:
+                    st.session_state.tendencia_icone_estado[id_user] = {"icone": " 🔽 ", "contador": 3}
+                else:
+                    if id_user in st.session_state.tendencia_icone_estado:
+                        if st.session_state.tendencia_icone_estado[id_user]["contador"] > 0:
+                            st.session_state.tendencia_icone_estado[id_user]["contador"] -= 1
+                        else:
+                            st.session_state.tendencia_icone_estado[id_user] = {"icone": "", "contador": 0}
             else:
-                tendencia_icone = ""
+                st.session_state.tendencia_icone_estado[id_user] = {"icone": "", "contador": 0}
 
             st.session_state.fechados_anteriores[id_user] = total_fechados
+
+            estado_tendencia = st.session_state.tendencia_icone_estado.get(id_user, {"icone": "", "contador": 0})
+            tendencia_icone = estado_tendencia["icone"] if estado_tendencia["contador"] > 0 else ""
 
             idx_offset = 1 if not df_sem.empty else 0
             col_idx = (i + idx_offset) % n_colunas
@@ -280,30 +292,33 @@ def exibir_dashboard(df, df_fechados_mes, models, db, uid, password):
     audio_file_feliz = os.path.join(os.path.dirname(os.path.abspath(__file__)), "feliz.wav")
     audio_file_triste = os.path.join(os.path.dirname(os.path.abspath(__file__)), "triste.wav")
 
-    total_fechados_anterior = st.session_state.get("total_fechados_anterior", 0)
+    total_fechados_anterior = st.session_state.get("total_fechados_anterior")
 
     st.title(f"📺 Dashboard - Equipe Suporte | 🎟️ Abertos: {total_abertos} | ✅ Fechados no mês: {total_fechados}")
-    st.markdown("Todos os tickets do ***Suporte***, exceto os ***Cancelados***, ***Encerrados***, ***Notificados*** ou ***Faturados***.")
+    st.badge("🎟️ Tickets Abertos: Todos exceto os ***Cancelados***, ***Encerrados***, ***Notificados*** ou ***Faturados***. ✅ Tickets Fechados: ***Encerrados***, ***Notificados*** ou ***Faturados***, com data de atualização no mês atual.")
 
     mostrar_fotos_agentes(df, df_fechados_mes, models, db, uid, password)
 
     print(f'Antes do IF, Tickets Fechados: {total_fechados} | {total_fechados_anterior}')
     
-    if total_fechados > total_fechados_anterior:
-        st.session_state["total_fechados_anterior"] = total_fechados  # Atualiza aqui
-        st.balloons()
-        st.balloons()
-        st.balloons()
-        tocar_audio(audio_file_feliz)
-        print(f'Depois do IF de Maior, Tickets Fechados: {total_fechados} | {total_fechados_anterior}')
+    # Só entra nas animações se já houver valor anterior
+    if total_fechados_anterior is not None:
+        if total_fechados > total_fechados_anterior:
+            st.balloons()
+            st.balloons()
+            st.balloons()
+            tocar_audio(audio_file_feliz)
+            print(f'Depois do IF de Maior, Tickets Fechados: {total_fechados} | {total_fechados_anterior}')
 
-    elif total_fechados < total_fechados_anterior:
-        st.session_state["total_fechados_anterior"] = total_fechados  # Atualiza aqui
-        st.snow()
-        st.snow()
-        st.snow()
-        tocar_audio(audio_file_triste)
-        print(f'Depois do IF de Menor, Tickets Fechados: {total_fechados} | {total_fechados_anterior}')
+        elif total_fechados < total_fechados_anterior:
+            st.snow()
+            st.snow()
+            st.snow()
+            tocar_audio(audio_file_triste)
+            print(f'Depois do IF de Menor, Tickets Fechados: {total_fechados} | {total_fechados_anterior}')
+
+    # Atualiza sempre no final (inclusive na primeira vez)
+    st.session_state["total_fechados_anterior"] = total_fechados
 
 try:
     # Usar um placeholder para o conteúdo principal
@@ -314,5 +329,8 @@ try:
         df_tratado = tratar_dados(df_raw)
         df_fechados_mes = carregar_tickets_fechados_mes(models, db, uid, password)
         exibir_dashboard(df_tratado, df_fechados_mes, models, db, uid, password)
+        # df_tratado.to_excel("Tickets_Abertos.xlsx", index=False)
+        # df_fechados_mes.to_excel("Tickets_Fechados_Mes.xlsx", index=False)
+        # print("Dados carregados com sucesso!")
 except Exception as e:
     st.error(f"Erro ao carregar dados: {e}")
