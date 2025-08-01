@@ -195,10 +195,10 @@ if dentro_do_horario():
             n_colunas = 5
             card_style = """
                 background-color: rgba(0,0,0,0.04);
-                border-radius: 16px;
-                padding: 12px 6px 8px 6px;
+                border-radius: 30px;
+                padding: 10px 6px 6px 6px;
                 box-shadow: 0 1px 6px 0 rgba(0,0,0,0.06);
-                border: 1.2px solid #bbb;
+                border: 2px solid #bbb;
                 text-align: center;
                 min-height: 172px;
                 margin-bottom: 8px;
@@ -211,9 +211,9 @@ if dentro_do_horario():
                 height: 85px;
                 object-fit: cover;
                 border-radius: 50%;
-                border: 2px solid #aaa;
+                border: 2px solid #bbb;
                 background: #f3f3f3;
-                margin-bottom: 6px;
+                margin-bottom: 3px;
             """
 
             prioridade_emojis = {'Urgente': '🚨', 'Alta': '🔴', 'Média': '🟡', 'Baixa': '🔵', 'False': '⚪', 'Não definida': '⚪'}
@@ -272,6 +272,38 @@ if dentro_do_horario():
                     cols = st.columns(n_colunas, gap="small")
                 col = cols[col_idx]
 
+                
+                # Cor da borda com base na tendência
+                if tendencia_icone == " 🔼 ":
+                    cor_borda = "#3ecf8e"  # verde
+                elif tendencia_icone == " 🔽 ":
+                    cor_borda = "#f45e5e"  # vermelho
+                else:
+                    cor_borda = "#bbb"     # cinza padrão
+
+                card_style = """
+                    background-color: rgba(0,0,0,0.04);
+                    border-radius: 30px;
+                    padding: 10px 6px 6px 6px;
+                    box-shadow: 0 1px 6px 0 rgba(0,0,0,0.06);
+                    border: 3px solid """ + cor_borda + """;
+                    text-align: center;
+                    min-height: 172px;
+                    margin-bottom: 8px;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                """
+                img_style = """
+                    width: 85px;
+                    height: 85px;
+                    object-fit: cover;
+                    border-radius: 50%;
+                    border: 3px solid """ + cor_borda + """;
+                    background: #f3f3f3;
+                    margin-bottom: 3px;
+                """
+
                 with col:
                     img_base64 = imagens_cache.get(id_user)
                     img_html = f'<img src="data:image/png;base64,{img_base64}" style="{img_style}">' if img_base64 else f'<img src="https://via.placeholder.com/85?text=Foto" style="{img_style}">'
@@ -284,7 +316,7 @@ if dentro_do_horario():
                             {img_html}
                             <div style="font-weight:600;font-size:1.01em;margin-bottom:1px;">{medalha} {agente} {tendencia_icone}</div>
                             <div style="font-size:0.93em;margin-bottom:3px;">🎟️ <b>{total_abertos}</b> abertos / ✅ <b>{total_fechados}</b> fechados</div>
-                            <hr style="border:0;border-top:1.1px dashed #bbb;margin:7px 0 7px 0;width:90%;">
+                            <hr style="border:0;border-top:1.1px dashed  {cor_borda};margin:7px 0 7px 0;width:90%;">
                             <div style="font-size:0.99em;">{prioridade_html}</div>
                         </div>
                     """, unsafe_allow_html=True)
