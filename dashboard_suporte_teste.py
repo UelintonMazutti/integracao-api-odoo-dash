@@ -12,7 +12,7 @@ import platform
 from streamlit_autorefresh import st_autorefresh
 
 # 🔁 Mantém refresh ativo sempre (1 minuto)
-st_autorefresh(interval=60 * 1000, key="refresh_dashboard", limit=None)
+st_autorefresh(interval=30 * 1000, key="refresh_dashboard", limit=None)
 
 # 🕒 Função de controle de horário
 def dentro_do_horario():
@@ -40,53 +40,78 @@ if dentro_do_horario():
     """, unsafe_allow_html=True)
 
     def carregar_dados():
-        # Verifica se já temos dados em cache
-        if 'dados_cache' in st.session_state and time.time() - st.session_state.dados_cache['timestamp'] < 25:
-            return st.session_state.dados_cache['df'], st.session_state.dados_cache['models'], st.session_state.dados_cache['db'], st.session_state.dados_cache['uid'], st.session_state.dados_cache['password']
-        
+        hoje = datetime.now()
+        hoje_str = hoje.strftime('%Y-%m-%d')
+
         url = "https://suporte.sag.com.br"
         db = "helpdesk-erp"
         username = "uelinton.silva@sag.com.br"
         password = "Dia@28_04#"
 
-        common = xmlrpc.client.ServerProxy(f'{url}/xmlrpc/2/common')
-        uid = common.authenticate(db, username, password, {})
-        models = xmlrpc.client.ServerProxy(f'{url}/xmlrpc/2/object')
+        # Reaproveita conexão existente se estiver em cache
+        if 'models' in st.session_state and 'uid' in st.session_state:
+            models = st.session_state.models
+            uid = st.session_state.uid
+        else:
+            common = xmlrpc.client.ServerProxy(f'{url}/xmlrpc/2/common')
+            uid = common.authenticate(db, username, password, {})
+            models = xmlrpc.client.ServerProxy(f'{url}/xmlrpc/2/object')
+            st.session_state.models = models
+            st.session_state.uid = uid
 
         estagios_excluidos = ['Cancelado/Recusado', 'Encerrado', 'Faturado', 'Notificado']
-
         id_estagios_validos = models.execute_kw(
             db, uid, password, 'helpdesk.stage', 'search',
             [[['name', 'not in', estagios_excluidos]]]
         )
 
-        # id_equipe = models.execute_kw(
-        #     db, uid, password, 'helpdesk.team', 'search',
-        #     [[['name', '=', 'Suporte']]]
-        # )[0]
+        tickets_fields = ['id', 'ticket_ref', 'stage_id', 'user_id', 'team_id', 'x_studio_prioridade']
 
-        # print(f'Equipe ID: {id_equipe}')
-
-        tickets_fields = ['ticket_ref', 'stage_id', 'user_id', 'team_id', 'x_studio_prioridade']
-
-        id_tickets = models.execute_kw(
-            db, uid, password, 'helpdesk.ticket', 'search',
-            [[
+        if 'dados_cache' not in st.session_state or st.session_state.get('ultima_execucao_dados') != hoje_str:
+            # Primeira execução do dia — busca completa
+            dominio = [
+                ['stage_id', 'in', id_estagios_validos],
+                ['team_id', '=', 1]
+            ]
+            st.session_state.ultima_execucao_dados = hoje_str
+            id_tickets = models.execute_kw(
+                db, uid, password, 'helpdesk.ticket', 'search',
+                [dominio],
+                {'limit': 1000, 'order': 'create_date desc'}
+            )
+            tickets_dados = models.execute_kw(
+                db, uid, password, 'helpdesk.ticket', 'read',
+                [id_tickets], {'fields': tickets_fields}
+            )
+            df = pd.DataFrame(tickets_dados)
+        else:
+            # Execução incremental — busca somente alterados hoje
+            dominio = [
                 ['stage_id', 'in', id_estagios_validos],
                 ['team_id', '=', 1],
-                ['ticket_ref', '!=', 106786] # Exclui ticket específico que uso pra testes
-            ]],
-            {'limit': 1000, 'order': 'create_date desc'}
-        )
+                ['write_date', '>=', hoje_str]
+            ]
+            id_tickets = models.execute_kw(
+                db, uid, password, 'helpdesk.ticket', 'search',
+                [dominio],
+                {'limit': 1000, 'order': 'write_date desc'}
+            )
+            if id_tickets:
+                tickets_dados = models.execute_kw(
+                    db, uid, password, 'helpdesk.ticket', 'read',
+                    [id_tickets], {'fields': tickets_fields}
+                )
+                df_alterados = pd.DataFrame(tickets_dados)
+                # Atualiza registros alterados no cache
+                df_antigo = st.session_state.dados_cache['df']
+                df = pd.concat([
+                    df_antigo[~df_antigo['id'].isin(df_alterados['id'])],
+                    df_alterados
+                ], ignore_index=True)
+            else:
+                df = st.session_state.dados_cache['df']
 
-        tickets_dados = models.execute_kw(
-            db, uid, password, 'helpdesk.ticket', 'read',
-            [id_tickets], {'fields': tickets_fields}
-        )
-
-        df = pd.DataFrame(tickets_dados)
-        
-        # Armazena os dados em cache
+        # Atualiza cache
         st.session_state.dados_cache = {
             'df': df,
             'models': models,
@@ -95,58 +120,109 @@ if dentro_do_horario():
             'password': password,
             'timestamp': time.time()
         }
-        
+
+        df.to_excel("Tickets_Abertos.xlsx", index=False)
+        ticket = df[df['ticket_ref'] == '106786']
+
+        if not ticket.empty:
+            descricao = ticket['stage_id'].iloc[0][1]  # Pega apenas a descrição do estágio
+            print(f"Status do Ticket 106786 em Abertos: {descricao}")
+        else:
+            print("Ticket 106786 não encontrado em Abertos.")
+
         return df, models, db, uid, password
 
     def carregar_tickets_fechados_mes(models, db, uid, password):
-        # Verifica se já temos dados em cache
-        if 'fechados_cache' in st.session_state and time.time() - st.session_state.fechados_cache['timestamp'] < 25:
-            return st.session_state.fechados_cache['df']
-        
         hoje = datetime.now()
-        primeiro_dia = hoje.replace(day=1).strftime('%Y-%m-%d')
-        proximo_mes = (hoje.replace(day=28) + pd.Timedelta(days=4)).replace(day=1)
-        proximo_dia_1 = proximo_mes.strftime('%Y-%m-%d')
+        hoje_str = hoje.strftime('%Y-%m-%d')
 
         estagios_fechados = ['Encerrado', 'Notificado']
 
-        id_stage_encerrado = models.execute_kw(
-            db, uid, password, 'helpdesk.stage', 'search',
-            [[['name', 'in', estagios_fechados]]]
-        )
+        id_stage_encerrado = models.execute_kw(db, uid, password, 'helpdesk.stage', 'search', [[['name', 'in', estagios_fechados]]])
+
         if not id_stage_encerrado:
-            df = pd.DataFrame()
-        else:
+            return pd.DataFrame()
+
+        tickets_fields = ['id', 'user_id', 'ticket_ref', 'stage_id', 'team_id']
+
+        if 'fechados_cache' not in st.session_state or st.session_state.get('ultima_execucao_fechados') != hoje_str:
+            # Primeira execução do dia — busca completa do mês
+            primeiro_dia = hoje.replace(day=1).strftime('%Y-%m-%d')
+            proximo_mes = (hoje.replace(day=28) + pd.Timedelta(days=4)).replace(day=1)
+            proximo_dia_1 = proximo_mes.strftime('%Y-%m-%d')
+
+            dominio = [
+                ['stage_id', 'in', id_stage_encerrado],
+                ['write_date', '>=', primeiro_dia],
+                ['write_date', '<', proximo_dia_1],
+                ['team_id', '=', 1]
+            ]
+
+            st.session_state.ultima_execucao_fechados = hoje_str
+
             ticket_ids = models.execute_kw(
                 db, uid, password, 'helpdesk.ticket', 'search',
-                [[
-                    ['stage_id', 'in', id_stage_encerrado],
-                    ['write_date', '>=', primeiro_dia],
-                    ['write_date', '<', proximo_dia_1],
-                    ['team_id', '=', 1],
-                    ['ticket_ref', '!=', 106786] # Exclui ticket específico que uso pra testes
-                ]],
+                [dominio],
                 {'limit': 1000}
             )
 
-            if not ticket_ids:
-                df = pd.DataFrame()
-            else:
+            if ticket_ids:
                 tickets_data = models.execute_kw(
                     db, uid, password, 'helpdesk.ticket', 'read',
-                    [ticket_ids], {'fields': ['user_id']}
+                    [ticket_ids], {'fields': tickets_fields}
                 )
-
                 df = pd.DataFrame(tickets_data)
-                df['user_id_num'] = df['user_id'].apply(lambda x: int(x[0]) if isinstance(x, list) else None)
-        
-        # Armazena os dados em cache
+            else:
+                df = pd.DataFrame()
+        else:
+            # Execução incremental — apenas os alterados hoje
+            dominio = [
+                ['write_date', '>=', hoje_str],
+                ['team_id', '=', 1]
+            ]
+
+            ticket_ids = models.execute_kw(
+                db, uid, password, 'helpdesk.ticket', 'search',
+                [dominio],
+                {'limit': 1000}
+            )
+
+            if ticket_ids:
+                tickets_data = models.execute_kw(
+                    db, uid, password, 'helpdesk.ticket', 'read',
+                    [ticket_ids], {'fields': tickets_fields}
+                )
+                df_alterados = pd.DataFrame(tickets_data)
+
+                df_antigo = st.session_state.fechados_cache['df'] if 'fechados_cache' in st.session_state else pd.DataFrame()
+                df = pd.concat([
+                    df_antigo[~df_antigo['id'].isin(df_alterados['id'])],
+                    df_alterados
+                ], ignore_index=True)
+            else:
+                df = st.session_state.fechados_cache['df']
+
+        # Adiciona coluna auxiliar
+        if not df.empty:
+            df['user_id_num'] = df['user_id'].apply(lambda x: int(x[0]) if isinstance(x, list) else None)
+
+        # Atualiza o cache
         st.session_state.fechados_cache = {
             'df': df,
             'timestamp': time.time()
         }
-        
+
+        df.to_excel("Tickets_Fechados_Mes.xlsx", index=False)
+        ticket = df[df['ticket_ref'] == '106786']
+
+        if not ticket.empty:
+            descricao = ticket['stage_id'].iloc[0][1]  # Pega apenas a descrição do estágio
+            print(f"Status do Ticket 106786 em Fechados: {descricao}")
+        else:
+            print("Ticket 106786 não encontrado em Abertos.")
+
         return df
+
 
     def tratar_dados(df):
         df['agente'] = df['user_id'].apply(lambda x: x[1] if isinstance(x, list) and len(x) > 1 else 'Sem Atribuição')
